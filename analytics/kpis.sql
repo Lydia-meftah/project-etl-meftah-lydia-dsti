@@ -32,3 +32,35 @@ JOIN dim_customers c ON c.customer_id = f.customer_id
 WHERE f.delivery_days IS NOT NULL
 GROUP BY c.customer_state
 ORDER BY on_time_pct DESC;
+
+-- 4. Revenue by payment type (uses the new fact_payments table).
+SELECT
+    payment_type,
+    ROUND(SUM(payment_value), 2) AS revenue,
+    COUNT(*)                     AS payment_lines,
+    ROUND(AVG(payment_installments), 1) AS avg_installments
+FROM fact_payments
+GROUP BY payment_type
+ORDER BY revenue DESC;
+
+-- 5. Customer satisfaction vs delivery lateness.
+-- Relates the review score (dim_reviews, joined into the fact) to whether
+-- the order arrived late — a direct ops/quality insight.
+SELECT
+    CASE WHEN is_late = 1 THEN 'late' ELSE 'on_time' END AS delivery,
+    ROUND(AVG(review_score), 2) AS avg_review_score,
+    COUNT(*)                    AS items
+FROM fact_order_items
+WHERE review_score IS NOT NULL
+GROUP BY is_late;
+
+-- 6. Average review score by product category (fact -> dim_products + review).
+SELECT
+    p.product_category,
+    ROUND(AVG(f.review_score), 2) AS avg_score,
+    COUNT(*)                      AS reviewed_items
+FROM fact_order_items f
+JOIN dim_products p ON p.product_id = f.product_id
+WHERE f.review_score IS NOT NULL
+GROUP BY p.product_category
+ORDER BY avg_score DESC;

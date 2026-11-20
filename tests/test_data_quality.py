@@ -7,7 +7,12 @@ These check the three things that break analytics most often:
 """
 from __future__ import annotations
 
-from etl.config import FACT_REQUIRED_COLUMNS
+from etl.config import (
+    FACT_REQUIRED_COLUMNS,
+    PAYMENTS_REQUIRED_COLUMNS,
+    REVIEW_SCORE_MAX,
+    REVIEW_SCORE_MIN,
+)
 
 
 # --- 1. Integrity --------------------------------------------------------
@@ -64,3 +69,44 @@ def test_every_fact_product_exists_in_dimension(star):
 def test_every_fact_customer_exists_in_dimension(star):
     fact, dim = star["fact_order_items"], star["dim_customers"]
     assert set(fact["customer_id"]).issubset(set(dim["customer_id"]))
+
+
+# --- 4. Payments fact ----------------------------------------------------
+def test_payments_required_columns_have_no_nulls(star):
+    pay = star["fact_payments"]
+    for col in PAYMENTS_REQUIRED_COLUMNS:
+        assert pay[col].notna().all(), f"Null in required payment column '{col}'"
+
+
+def test_payments_grain_is_unique(star):
+    """One row per (order_id, payment_sequential)."""
+    pay = star["fact_payments"]
+    assert not pay.duplicated(subset=["order_id", "payment_sequential"]).any()
+
+
+def test_payment_values_are_non_negative(star):
+    pay = star["fact_payments"]
+    assert (pay["payment_value"] >= 0).all()
+
+
+# --- 5. Reviews dimension ------------------------------------------------
+def test_reviews_are_unique_per_order(star):
+    dim = star["dim_reviews"]
+    assert not dim.duplicated(subset="order_id").any()
+
+
+def test_latest_review_is_kept(star):
+    """Order o2 was reviewed twice; the most recent score (4) must win."""
+    dim = star["dim_reviews"]
+    assert dim.loc[dim["order_id"] == "o2", "review_score"].iloc[0] == 4
+
+
+def test_review_scores_are_in_valid_range(star):
+    dim = star["dim_reviews"]
+    assert dim["review_score"].between(REVIEW_SCORE_MIN, REVIEW_SCORE_MAX).all()
+
+
+# --- 6. Geolocation dimension -------------------------------------------
+def test_geolocation_is_unique_per_zip_prefix(star):
+    dim = star["dim_geolocation"]
+    assert not dim.duplicated(subset="geolocation_zip_code_prefix").any()

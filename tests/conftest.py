@@ -72,6 +72,35 @@ def raw_sample() -> dict[str, pd.DataFrame]:
             "product_category_name_english": ["bed_bath_table"],
         }
     )
+    payments = pd.DataFrame(
+        {
+            "order_id": ["o1", "o1", "o2"],  # o1 split across two methods
+            "payment_sequential": [1, 2, 1],
+            "payment_type": ["credit_card", "voucher", "boleto"],
+            "payment_installments": [3, 1, 1],
+            "payment_value": [150.0, 15.0, 220.0],
+        }
+    )
+    reviews = pd.DataFrame(
+        {
+            "review_id": ["r1", "r2", "r2b"],
+            "order_id": ["o1", "o2", "o2"],  # o2 reviewed twice
+            "review_score": [5, 2, 4],
+            "review_creation_date": [
+                "2018-01-06",
+                "2018-02-21",
+                "2018-02-25",  # latest -> this one (score 4) is kept
+            ],
+        }
+    )
+    geolocation = pd.DataFrame(
+        {
+            "geolocation_zip_code_prefix": [1000, 1000, 2000],
+            "geolocation_lat": [-23.5, -23.6, -22.9],
+            "geolocation_lng": [-46.6, -46.7, -43.2],
+            "geolocation_state": ["SP", "SP", "RJ"],
+        }
+    )
     return {
         "orders": orders,
         "order_items": order_items,
@@ -79,6 +108,9 @@ def raw_sample() -> dict[str, pd.DataFrame]:
         "products": products,
         "sellers": sellers,
         "category_translation": translation,
+        "payments": payments,
+        "reviews": reviews,
+        "geolocation": geolocation,
     }
 
 

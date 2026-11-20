@@ -24,28 +24,41 @@ it guarantees that quality through tests.
 └──────────┘     └─────────────┘     └──────────────┘     └───────────────┘
 ```
 
-## Data model (star schema)
+## Data model (fact constellation)
 
-The fact table is at the **order-item grain** (one row per item in an order),
-surrounded by conformed dimensions — a classic Kimball star schema.
+Two fact tables share conformed dimensions — a Kimball **fact constellation**
+(a star schema extended with a second fact). `fact_order_items` is at the
+**order-item grain**; `fact_payments` is at the **payment grain** (an order
+can be paid with several methods).
 
 ```
-                 ┌──────────────┐
-                 │ dim_customers│
-                 └──────┬───────┘
-                        │
-┌──────────────┐   ┌────┴─────────────┐   ┌──────────────┐
+   ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+   │ dim_customers│     │  dim_reviews │     │ dim_geolocation│
+   └──────┬───────┘     └──────┬───────┘     └──────────────┘
+          │                    │
+┌──────────────┐   ┌───────────┴──────┐   ┌──────────────┐
 │ dim_products │───│ fact_order_items │───│  dim_sellers │
 └──────────────┘   │  (grain: item)   │   └──────────────┘
                    │  price, freight, │
                    │  delivery_days,  │
-                   │  is_late, ...    │
+                   │  is_late,        │
+                   │  review_score    │
+                   └──────────────────┘
+                   ┌──────────────────┐
+                   │   fact_payments  │  grain: one payment line per order
+                   │  type, value,    │
+                   │  installments    │
                    └──────────────────┘
 ```
 
-Derived business metrics computed in the transform step:
-`delivery_days`, `is_late` (delivered after the promised date), and
-`total_item_value` (price + freight).
+Tables produced:
+- **fact_order_items** — revenue grain, enriched with `delivery_days`,
+  `is_late` (delivered after the promised date), `total_item_value`
+  (price + freight) and the order's `review_score`.
+- **fact_payments** — one row per payment line: method, value, installments.
+- **dim_customers / dim_products / dim_sellers** — conformed dimensions.
+- **dim_reviews** — one row per order (latest review kept), 1–5 star score.
+- **dim_geolocation** — one row per zip-code prefix (mean lat/lng).
 
 ## Project structure
 
@@ -80,9 +93,10 @@ sqlite3 data/processed/olist.db < analytics/kpis.sql   # see the KPIs
 The pipeline is covered by tests that encode the contract it guarantees
 downstream (run with `make test`):
 
-- **Integrity** — required keys are never null.
-- **Consistency** — the declared grain is unique, duplicates are removed, and
-  each derived metric (`delivery_days`, `is_late`, `total_item_value`) is correct.
+- **Integrity** — required keys are never null (order items and payments).
+- **Consistency** — each declared grain is unique (order-item and payment),
+  duplicates are removed, review scores stay within 1–5, payment values are
+  non-negative, and each derived metric is correct.
 - **Referential integrity** — every fact row points to an existing dimension row.
 
 Tests run on a small synthetic fixture, so they execute in milliseconds and

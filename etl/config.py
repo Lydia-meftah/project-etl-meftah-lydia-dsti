@@ -27,6 +27,9 @@ SOURCE_FILES: dict[str, str] = {
     "products": "olist_products_dataset.csv",
     "sellers": "olist_sellers_dataset.csv",
     "category_translation": "product_category_name_translation.csv",
+    "payments": "olist_order_payments_dataset.csv",
+    "reviews": "olist_order_reviews_dataset.csv",
+    "geolocation": "olist_geolocation_dataset.csv",
 }
 
 # Columns that must never be null in the cleaned fact table. Used by the
@@ -39,3 +42,15 @@ FACT_REQUIRED_COLUMNS: list[str] = [
     "customer_id",
     "price",
 ]
+
+# Same contract for the payments fact table (grain: one payment line per order).
+PAYMENTS_REQUIRED_COLUMNS: list[str] = [
+    "order_id",
+    "payment_sequential",
+    "payment_type",
+    "payment_value",
+]
+
+# Valid range for a customer review score (Olist uses a 1-5 star scale).
+REVIEW_SCORE_MIN = 1
+REVIEW_SCORE_MAX = 5
