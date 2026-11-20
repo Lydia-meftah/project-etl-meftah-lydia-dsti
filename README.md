@@ -1,86 +1,103 @@
-# Olist ETL Data Pipeline
+# Olist ETL — Data Engineering Pipeline
 
-Olist ETL – Data Engineering Project
-Author: Lydia Meftah
-Program: MSc Data Engineer – Applied AI (DSTI)
+A production-style **ETL pipeline** in Python/pandas that turns the raw
+[Olist Brazilian e-commerce dataset](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce)
+into a clean **star schema** ready for analytics, with automated data-quality tests.
 
---------------------------------------------------
+**Author:** Lydia Meftah — MSc Data Engineer / Applied AI (DSTI)
 
-PROJECT DESCRIPTION
+---
 
-This project implements a data engineering ETL pipeline based on the Olist
-Brazilian e-commerce dataset.
+## Why this project
 
-The objective is to process raw transactional data and transform it into a
-clean and structured format suitable for analytics.
+Raw transactional data is spread across several CSVs with inconsistent types,
+duplicates, missing values and Portuguese labels. This pipeline applies the
+core data-engineering steps — **Extract → Transform → Load** — to produce a
+dimensional model that analysts and BI tools can query with simple joins, and
+it guarantees that quality through tests.
 
-The project focuses on core data engineering principles:
-- Extracting raw data
-- Cleaning and transforming datasets
-- Ensuring data quality
-- Preparing data for analytical usage
+```
+┌──────────┐     ┌─────────────┐     ┌──────────────┐     ┌───────────────┐
+│  EXTRACT │ ──▶ │  TRANSFORM  │ ──▶ │     LOAD     │ ──▶ │   ANALYTICS   │
+│ raw CSVs │     │ clean +     │     │  SQLite      │     │  SQL KPIs /   │
+│          │     │ star schema │     │  warehouse   │     │  BI dashboard │
+└──────────┘     └─────────────┘     └──────────────┘     └───────────────┘
+```
 
---------------------------------------------------
+## Data model (star schema)
 
-PROJECT STRUCTURE
+The fact table is at the **order-item grain** (one row per item in an order),
+surrounded by conformed dimensions — a classic Kimball star schema.
 
-The repository is organized as follows:
+```
+                 ┌──────────────┐
+                 │ dim_customers│
+                 └──────┬───────┘
+                        │
+┌──────────────┐   ┌────┴─────────────┐   ┌──────────────┐
+│ dim_products │───│ fact_order_items │───│  dim_sellers │
+└──────────────┘   │  (grain: item)   │   └──────────────┘
+                   │  price, freight, │
+                   │  delivery_days,  │
+                   │  is_late, ...    │
+                   └──────────────────┘
+```
 
-- src/
-  Contains the Python scripts implementing the ETL logic.
+Derived business metrics computed in the transform step:
+`delivery_days`, `is_late` (delivered after the promised date), and
+`total_item_value` (price + freight).
 
-- sql/
-  Contains SQL queries used for analytical purposes.
+## Project structure
 
-- tests/
-  Contains automated tests related to data quality and validation.
+```
+olist-etl/
+├── etl/
+│   ├── config.py      # paths, source files, quality contract (single source of truth)
+│   ├── extract.py     # load raw CSVs — no business logic
+│   ├── transform.py   # clean + build the star schema (the core logic)
+│   ├── load.py        # idempotent write to the SQLite warehouse
+│   └── pipeline.py    # orchestrates Extract → Transform → Load
+├── tests/
+│   └── test_data_quality.py  # integrity, consistency & referential checks
+├── analytics/
+│   └── kpis.sql       # example KPI queries on the star schema
+├── Makefile           # make install / run / test
+└── requirements.txt
+```
 
-- requirements.txt
-  Lists the Python dependencies required to run the project.
+## Quickstart
 
-- Makefile
-  Provides standardized commands to execute the pipeline.
+```bash
+make install                 # install dependencies
+# download the Olist CSVs from Kaggle into data/raw/
+make run                     # Extract → Transform → Load  ->  data/processed/olist.db
+make test                    # run the data-quality test suite
+sqlite3 data/processed/olist.db < analytics/kpis.sql   # see the KPIs
+```
 
-- README.txt
-  Project documentation.
+## Data quality
 
---------------------------------------------------
+The pipeline is covered by tests that encode the contract it guarantees
+downstream (run with `make test`):
 
-ETL LOGIC OVERVIEW
+- **Integrity** — required keys are never null.
+- **Consistency** — the declared grain is unique, duplicates are removed, and
+  each derived metric (`delivery_days`, `is_late`, `total_item_value`) is correct.
+- **Referential integrity** — every fact row points to an existing dimension row.
 
-1. Extract
-Raw data is loaded from source files without applying business logic.
+Tests run on a small synthetic fixture, so they execute in milliseconds and
+need no dataset download — suitable for CI.
 
-2. Transform
-The transformation step applies cleaning and normalization rules to ensure
-data consistency and usability.
+## Design choices
 
-3. Load
-The processed data is prepared for analytical consumption.
+- **Separation of concerns** — extract does no cleaning; all business rules
+  live in `transform.py`, so each step is independently testable.
+- **Idempotent load** — re-running replaces tables, never duplicates rows.
+- **Config in one place** — paths and the quality contract live in `config.py`,
+  so the pipeline can be pointed at another environment by editing one file.
+- **SQLite as a stand-in warehouse** — the same contract maps directly onto
+  BigQuery / Postgres / Snowflake.
 
---------------------------------------------------
+## Tech stack
 
-DATA QUALITY
-
-Basic data quality checks are implemented through automated tests to ensure:
-- Dataset integrity
-- Consistency of values
-- Presence of required fields
-
---------------------------------------------------
-
-EXECUTION
-
-Dependencies must be installed before running the project.
-
-The ETL pipeline can be executed using the Makefile or directly via Python.
-
---------------------------------------------------
-
-ACADEMIC CONTEXT
-
-This project was developed as part of the MSc Data Engineer – Applied AI
-program at DSTI.
-
-It is intended as a standalone academic deliverable demonstrating data
-engineering fundamentals.
+Python · pandas · SQL (SQLite) · pytest · Make

@@ -1,4 +1,2 @@
-pandas
-duckdb
-pyarrow
-pytest
+pandas>=2.0
+pytest>=7.4

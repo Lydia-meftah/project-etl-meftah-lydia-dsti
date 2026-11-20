@@ -1,0 +1,12 @@
+# Data is not committed (too large; download from Kaggle — see README).
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
