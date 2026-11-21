@@ -60,21 +60,44 @@ Tables produced:
 - **dim_reviews** — one row per order (latest review kept), 1–5 star score.
 - **dim_geolocation** — one row per zip-code prefix (mean lat/lng).
 
+## Architecture
+
+The warehouse is built in layers, the dbt-style convention that keeps cleaning
+and modelling separate:
+
+```
+raw CSVs ──▶ staging (1:1 cleaned) ──▶ marts (star schema) ──▶ quality gate ──▶ warehouse ──▶ dashboard
+```
+
+- **staging** (`etl/staging.py`) — one cleaned table per source, no joins.
+- **marts** (`etl/marts.py`) — the dimensional model, built from staging only.
+- **quality gate** (`etl/quality.py`) — the contract checked on the *real*
+  tables at run time; a bad load is stopped before it reaches the warehouse.
+- **orchestration** (`orchestration/`) — a dependency-aware DAG runs the whole
+  thing (`extract → stage → marts → quality_gate → load`), with logging,
+  timing and retries. It maps directly onto Airflow / Prefect.
+
 ## Project structure
 
 ```
 olist-etl/
 ├── etl/
-│   ├── config.py      # paths, source files, quality contract (single source of truth)
-│   ├── extract.py     # load raw CSVs — no business logic
-│   ├── transform.py   # clean + build the star schema (the core logic)
-│   ├── load.py        # idempotent write to the SQLite warehouse
-│   └── pipeline.py    # orchestrates Extract → Transform → Load
-├── tests/
-│   └── test_data_quality.py  # integrity, consistency & referential checks
-├── analytics/
-│   └── kpis.sql       # example KPI queries on the star schema
-├── Makefile           # make install / run / test
+│   ├── config.py        # paths, source files, quality contract (single source of truth)
+│   ├── extract.py       # load raw CSVs — no business logic
+│   ├── staging.py       # 1:1 cleaned source tables (staging layer)
+│   ├── marts.py         # dimensional model built from staging (marts layer)
+│   ├── transform.py     # staging + marts entry point
+│   ├── quality.py       # runtime data-quality gate
+│   ├── load.py          # idempotent write to the SQLite warehouse
+│   └── pipeline.py      # simple linear run
+├── orchestration/
+│   ├── dag.py           # minimal dependency-aware DAG engine
+│   └── flow.py          # the Olist pipeline as an orchestrated DAG
+├── dashboard/
+│   └── build_dashboard.py  # renders a static KPI dashboard (HTML) from the warehouse
+├── tests/               # 26 tests: data quality, staging, DAG engine, quality gate
+├── analytics/kpis.sql   # example KPI queries on the star schema
+├── Makefile             # make install / run / orchestrate / dashboard / test
 └── requirements.txt
 ```
 
@@ -83,10 +106,14 @@ olist-etl/
 ```bash
 make install                 # install dependencies
 # download the Olist CSVs from Kaggle into data/raw/
-make run                     # Extract → Transform → Load  ->  data/processed/olist.db
-make test                    # run the data-quality test suite
-sqlite3 data/processed/olist.db < analytics/kpis.sql   # see the KPIs
+make orchestrate             # run the pipeline through the DAG (with quality gate)
+make dashboard               # build dashboard/dashboard.html from the warehouse
+make test                    # run the test suite (26 tests)
+sqlite3 data/processed/olist.db < analytics/kpis.sql   # see the KPIs in SQL
 ```
+
+`make run` runs the same steps as a simple linear script; `make orchestrate`
+runs them through the DAG with the quality gate — use either.
 
 ## Data quality
 
@@ -114,4 +141,5 @@ need no dataset download — suitable for CI.
 
 ## Tech stack
 
-Python · pandas · SQL (SQLite) · pytest · Make
+Python · pandas · SQL (SQLite) · pytest · Make · Chart.js (dashboard) ·
+staging/marts layering · DAG orchestration
